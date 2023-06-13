@@ -28,7 +28,7 @@ import time
 from multiprocessing import cpu_count
 from multiprocessing.pool import ThreadPool
 
-from ansible.module_utils._text import to_text
+from ansible.module_utils.common.text.converters import to_text
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.process import get_bin_path
 from ansible.module_utils.common.text.formatters import bytes_to_human
@@ -550,7 +550,7 @@ class LinuxHardware(Hardware):
         # start threads to query each mount
         results = {}
         pool = ThreadPool(processes=min(len(mtab_entries), cpu_count()))
-        maxtime = globals().get('GATHER_TIMEOUT') or timeout.DEFAULT_GATHER_TIMEOUT
+        maxtime = timeout.GATHER_TIMEOUT or timeout.DEFAULT_GATHER_TIMEOUT
         for fields in mtab_entries:
             # Transform octal escape sequences
             fields = [self._replace_octal_escapes(field) for field in fields]

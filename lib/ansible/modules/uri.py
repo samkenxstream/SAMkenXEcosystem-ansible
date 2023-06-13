@@ -94,9 +94,16 @@ options:
   force_basic_auth:
     description:
       - Force the sending of the Basic authentication header upon initial request.
-      - The library used by the uri module only sends authentication information when a webservice
-        responds to an initial request with a 401 status. Since some basic auth services do not properly
-        send a 401, logins will fail.
+      - When this setting is C(false), this module will first try an unauthenticated request, and when the server replies
+        with an C(HTTP 401) error, it will submit the Basic authentication header.
+      - When this setting is C(true), this module will immediately send a Basic authentication header on the first
+        request.
+      - "Use this setting in any of the following scenarios:"
+      - You know the webservice endpoint always requires HTTP Basic authentication, and you want to speed up your
+        requests by eliminating the first roundtrip.
+      - The web service does not properly send an HTTP 401 error to your client, so Ansible's HTTP library will not
+        properly respond with HTTP credentials, and logins will fail.
+      - The webservice bans or rate-limits clients that cause any HTTP 401 errors.
     type: bool
     default: no
   follow_redirects:
@@ -250,12 +257,12 @@ EXAMPLES = r'''
   ansible.builtin.uri:
     url: http://www.example.com
 
-- name: Check that a page returns a status 200 and fail if the word AWESOME is not in the page contents
+- name: Check that a page returns successfully but fail if the word AWESOME is not in the page contents
   ansible.builtin.uri:
     url: http://www.example.com
     return_content: true
   register: this
-  failed_when: "'AWESOME' not in this.content"
+  failed_when: this is failed or "'AWESOME' not in this.content"
 
 - name: Create a JIRA issue
   ansible.builtin.uri:
@@ -444,7 +451,7 @@ import tempfile
 from ansible.module_utils.basic import AnsibleModule, sanitize_keys
 from ansible.module_utils.six import PY2, PY3, binary_type, iteritems, string_types
 from ansible.module_utils.six.moves.urllib.parse import urlencode, urlsplit
-from ansible.module_utils._text import to_native, to_text
+from ansible.module_utils.common.text.converters import to_native, to_text
 from ansible.module_utils.six.moves.collections_abc import Mapping, Sequence
 from ansible.module_utils.urls import fetch_url, get_response_filename, parse_content_type, prepare_multipart, url_argument_spec
 
@@ -700,7 +707,15 @@ def main():
         sub_type = 'octet-stream'
         content_encoding = 'utf-8'
 
-    maybe_json = content_type and sub_type.lower() in JSON_CANDIDATES
+    if sub_type and '+' in sub_type:
+        # https://www.rfc-editor.org/rfc/rfc6839#section-3.1
+        sub_type_suffix = sub_type.partition('+')[2]
+        maybe_json = content_type and sub_type_suffix.lower() in JSON_CANDIDATES
+    elif sub_type:
+        maybe_json = content_type and sub_type.lower() in JSON_CANDIDATES
+    else:
+        maybe_json = False
+
     maybe_output = maybe_json or return_content or info['status'] not in status_code
 
     if maybe_output:

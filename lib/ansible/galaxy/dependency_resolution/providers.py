@@ -28,8 +28,6 @@ from ansible.galaxy.dependency_resolution.versioning import (
 from ansible.module_utils.six import string_types
 from ansible.utils.version import SemanticVersion, LooseVersion
 
-from collections.abc import Set
-
 try:
     from resolvelib import AbstractProvider
     from resolvelib import __version__ as resolvelib_version
@@ -42,36 +40,8 @@ except ImportError:
 
 # TODO: add python requirements to ansible-test's ansible-core distribution info and remove the hardcoded lowerbound/upperbound fallback
 RESOLVELIB_LOWERBOUND = SemanticVersion("0.5.3")
-RESOLVELIB_UPPERBOUND = SemanticVersion("0.10.0")
+RESOLVELIB_UPPERBOUND = SemanticVersion("1.1.0")
 RESOLVELIB_VERSION = SemanticVersion.from_loose_version(LooseVersion(resolvelib_version))
-
-
-class PinnedCandidateRequests(Set):
-    """Custom set class to store Candidate objects. Excludes the 'signatures' attribute when determining if a Candidate instance is in the set."""
-    CANDIDATE_ATTRS = ('fqcn', 'ver', 'src', 'type')
-
-    def __init__(self, candidates):
-        self._candidates = set(candidates)
-
-    def __iter__(self):
-        return iter(self._candidates)
-
-    def __contains__(self, value):
-        if not isinstance(value, Candidate):
-            raise ValueError(f"Expected a Candidate object but got {value!r}")
-        for candidate in self._candidates:
-            # Compare Candidate attributes excluding "signatures" since it is
-            # unrelated to whether or not a matching Candidate is user-requested.
-            # Candidate objects in the set are not expected to have signatures.
-            for attr in PinnedCandidateRequests.CANDIDATE_ATTRS:
-                if getattr(value, attr) != getattr(candidate, attr):
-                    break
-            else:
-                return True
-        return False
-
-    def __len__(self):
-        return len(self._candidates)
 
 
 class CollectionDependencyProviderBase(AbstractProvider):
@@ -117,7 +87,7 @@ class CollectionDependencyProviderBase(AbstractProvider):
             Requirement.from_requirement_dict,
             art_mgr=concrete_artifacts_manager,
         )
-        self._pinned_candidate_requests = PinnedCandidateRequests(
+        self._pinned_candidate_requests = set(
             # NOTE: User-provided signatures are supplemental, so signatures
             # NOTE: are not used to determine if a candidate is user-requested
             Candidate(req.fqcn, req.ver, req.src, req.type, None)
@@ -220,7 +190,7 @@ class CollectionDependencyProviderBase(AbstractProvider):
             Mapping of identifier, list of named tuple pairs.
             The named tuples have the entries ``requirement`` and ``parent``.
 
-        resolvelib >=0.8.0, <= 0.9.0
+        resolvelib >=0.8.0, <= 1.0.1
 
         :param identifier: The value returned by ``identify()``.
 
@@ -392,7 +362,6 @@ class CollectionDependencyProviderBase(AbstractProvider):
 
             if not unsatisfied:
                 if self._include_signatures:
-                    signatures = src_server.get_collection_signatures(first_req.namespace, first_req.name, version)
                     for extra_source in extra_signature_sources:
                         signatures.append(get_signature_from_source(extra_source))
                 latest_matches.append(

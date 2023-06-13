@@ -47,7 +47,7 @@ def calculate_confidence(path: str, line: int, metadata: Metadata) -> int:
         return 0
 
     # changes were made to the same file and line
-    if any(r[0] <= line <= r[1] in r for r in ranges):
+    if any(r[0] <= line <= r[1] for r in ranges):
         return 100
 
     # changes were made to the same file and the line number is unknown
@@ -114,7 +114,7 @@ class TestResult:
                 junit_xml.TestSuite(
                     name='ansible-test',
                     cases=[test_case],
-                    timestamp=datetime.datetime.utcnow(),
+                    timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
                 ),
             ],
         )
@@ -130,7 +130,7 @@ class TestResult:
 class TestTimeout(TestResult):
     """Test timeout."""
 
-    def __init__(self, timeout_duration: int) -> None:
+    def __init__(self, timeout_duration: int | float) -> None:
         super().__init__(command='timeout', test='')
 
         self.timeout_duration = timeout_duration
@@ -153,13 +153,11 @@ One or more of the following situations may be responsible:
 
         output += '\n\nConsult the console log for additional details on where the timeout occurred.'
 
-        timestamp = datetime.datetime.utcnow()
-
         suites = junit_xml.TestSuites(
             suites=[
                 junit_xml.TestSuite(
                     name='ansible-test',
-                    timestamp=timestamp,
+                    timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
                     cases=[
                         junit_xml.TestCase(
                             name='timeout',

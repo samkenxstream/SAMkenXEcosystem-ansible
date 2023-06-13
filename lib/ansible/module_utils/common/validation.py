@@ -9,7 +9,7 @@ import os
 import re
 
 from ast import literal_eval
-from ansible.module_utils._text import to_native
+from ansible.module_utils.common.text.converters import to_native
 from ansible.module_utils.common._json_compat import json
 from ansible.module_utils.common.collections import is_iterable
 from ansible.module_utils.common.text.converters import jsonify
@@ -381,7 +381,7 @@ def check_type_str(value, allow_conversion=True, param=None, prefix=''):
     if isinstance(value, string_types):
         return value
 
-    if allow_conversion:
+    if allow_conversion and value is not None:
         return to_native(value, errors='surrogate_or_strict')
 
     msg = "'{0!r}' is not a string and conversion is not allowed".format(value)

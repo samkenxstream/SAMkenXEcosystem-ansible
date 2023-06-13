@@ -45,8 +45,8 @@ from ansible.errors import (
     AnsibleOptionsError,
     AnsibleUndefinedVariable,
 )
-from ansible.module_utils.six import string_types, text_type
-from ansible.module_utils._text import to_native, to_text, to_bytes
+from ansible.module_utils.six import string_types
+from ansible.module_utils.common.text.converters import to_native, to_text, to_bytes
 from ansible.module_utils.common.collections import is_sequence
 from ansible.plugins.loader import filter_loader, lookup_loader, test_loader
 from ansible.template.native_helpers import ansible_native_concat, ansible_eval_concat, ansible_concat
@@ -151,6 +151,39 @@ def _escape_backslashes(data, jinja_env):
         data = ''.join(new_data)
 
     return data
+
+
+def _create_overlay(data, overrides, jinja_env):
+    if overrides is None:
+        overrides = {}
+
+    try:
+        has_override_header = data.startswith(JINJA2_OVERRIDE)
+    except (TypeError, AttributeError):
+        has_override_header = False
+
+    if overrides or has_override_header:
+        overlay = jinja_env.overlay(**overrides)
+    else:
+        overlay = jinja_env
+
+    # Get jinja env overrides from template
+    if has_override_header:
+        eol = data.find('\n')
+        line = data[len(JINJA2_OVERRIDE):eol]
+        data = data[eol + 1:]
+        for pair in line.split(','):
+            if ':' not in pair:
+                raise AnsibleError("failed to parse jinja2 override '%s'."
+                                   " Did you use something different from colon as key-value separator?" % pair.strip())
+            (key, val) = pair.split(':', 1)
+            key = key.strip()
+            if hasattr(overlay, key):
+                setattr(overlay, key, ast.literal_eval(val.strip()))
+            else:
+                display.warning(f"Could not find Jinja2 environment setting to override: '{key}'")
+
+    return data, overlay
 
 
 def is_possibly_template(data, jinja_env):
@@ -545,14 +578,7 @@ class Templar:
     The main class for templating, with the main entry-point of template().
     '''
 
-    def __init__(self, loader, shared_loader_obj=None, variables=None):
-        if shared_loader_obj is not None:
-            display.deprecated(
-                "The `shared_loader_obj` option to `Templar` is no longer functional, "
-                "ansible.plugins.loader is used directly instead.",
-                version='2.16',
-            )
-
+    def __init__(self, loader, variables=None):
         self._loader = loader
         self._available_variables = {} if variables is None else variables
 
@@ -565,9 +591,6 @@ class Templar:
             loader=FileSystemLoader(loader.get_basedir() if loader else '.'),
         )
         self.environment.template_class.environment_class = environment_class
-
-        # jinja2 global is inconsistent across versions, this normalizes them
-        self.environment.globals['dict'] = dict
 
         # Custom globals
         self.environment.globals['lookup'] = self._lookup
@@ -705,7 +728,7 @@ class Templar:
             variable = self._convert_bare_variable(variable)
 
         if isinstance(variable, string_types):
-            if not self.is_possibly_template(variable):
+            if not self.is_possibly_template(variable, overrides):
                 return variable
 
             # Check to see if the string we are trying to render is just referencing a single
@@ -776,8 +799,9 @@ class Templar:
 
     templatable = is_template
 
-    def is_possibly_template(self, data):
-        return is_possibly_template(data, self.environment)
+    def is_possibly_template(self, data, overrides=None):
+        data, env = _create_overlay(data, overrides, self.environment)
+        return is_possibly_template(data, env)
 
     def _convert_bare_variable(self, variable):
         '''
@@ -918,31 +942,11 @@ class Templar:
         if fail_on_undefined is None:
             fail_on_undefined = self._fail_on_undefined_errors
 
-        has_template_overrides = data.startswith(JINJA2_OVERRIDE)
-
         try:
             # NOTE Creating an overlay that lives only inside do_template means that overrides are not applied
             # when templating nested variables in AnsibleJ2Vars where Templar.environment is used, not the overlay.
             # This is historic behavior that is kept for backwards compatibility.
-            if overrides:
-                myenv = self.environment.overlay(overrides)
-            elif has_template_overrides:
-                myenv = self.environment.overlay()
-            else:
-                myenv = self.environment
-
-            # Get jinja env overrides from template
-            if has_template_overrides:
-                eol = data.find('\n')
-                line = data[len(JINJA2_OVERRIDE):eol]
-                data = data[eol + 1:]
-                for pair in line.split(','):
-                    if ':' not in pair:
-                        raise AnsibleError("failed to parse jinja2 override '%s'."
-                                           " Did you use something different from colon as key-value separator?" % pair.strip())
-                    (key, val) = pair.split(':', 1)
-                    key = key.strip()
-                    setattr(myenv, key, ast.literal_eval(val.strip()))
+            data, myenv = _create_overlay(data, overrides, self.environment)
 
             if escape_backslashes:
                 # Allow users to specify backslashes in playbooks as "\\" instead of as "\\\\".
@@ -970,7 +974,7 @@ class Templar:
             # In case this is a recursive call and we set different concat
             # function up the stack, reset it in case the value of convert_data
             # changed in this call
-            self.environment.concat = self.environment.__class__.concat
+            myenv.concat = myenv.__class__.concat
             # the concat function is set for each Ansible environment,
             # however for convert_data=False we need to use the concat
             # function that avoids any evaluation and set it temporarily
@@ -978,13 +982,13 @@ class Templar:
             # the concat function is called internally in Jinja,
             # most notably for macro execution
             if not self.jinja2_native and not convert_data:
-                self.environment.concat = ansible_concat
+                myenv.concat = ansible_concat
 
             self.cur_context = t.new_context(jvars, shared=True)
             rf = t.root_render_func(self.cur_context)
 
             try:
-                res = self.environment.concat(rf)
+                res = myenv.concat(rf)
                 unsafe = getattr(self.cur_context, 'unsafe', False)
                 if unsafe:
                     res = wrap_var(res)
@@ -1012,7 +1016,7 @@ class Templar:
                 # "Hello world\n!\n" instead of "Hello world!\n".
                 res_newlines = _count_newlines_from_end(res)
                 if data_newlines > res_newlines:
-                    res += self.environment.newline_sequence * (data_newlines - res_newlines)
+                    res += myenv.newline_sequence * (data_newlines - res_newlines)
                     if unsafe:
                         res = wrap_var(res)
             return res

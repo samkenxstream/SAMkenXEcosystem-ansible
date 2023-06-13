@@ -100,7 +100,7 @@ options:
 extends_documentation_fragment: action_common_attributes
 attributes:
     check_mode:
-        support: full
+        support: none
     diff_mode:
         support: none
     platform:
@@ -238,7 +238,7 @@ import traceback
 
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils.common.sys_info import get_platform_subclass
-from ansible.module_utils._text import to_bytes
+from ansible.module_utils.common.text.converters import to_bytes
 
 
 HAS_PSUTIL = False

@@ -293,7 +293,7 @@ import stat
 import tempfile
 import traceback
 
-from ansible.module_utils._text import to_bytes, to_native
+from ansible.module_utils.common.text.converters import to_bytes, to_native
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.process import get_bin_path
 from ansible.module_utils.common.locale import get_best_parsable_locale
@@ -616,6 +616,8 @@ def main():
                 e.result['msg'] += ' Could not copy to {0}'.format(dest)
                 module.fail_json(**e.results)
 
+            if module.check_mode:
+                module.exit_json(msg='dest directory %s would be created' % dirname, changed=True, src=src)
             os.makedirs(b_dirname)
             changed = True
             directory_args = module.load_file_common_arguments(module.params)
@@ -687,7 +689,7 @@ def main():
                 b_mysrc = b_src
                 if remote_src and os.path.isfile(b_src):
 
-                    _, b_mysrc = tempfile.mkstemp(dir=os.path.dirname(b_dest))
+                    dummy, b_mysrc = tempfile.mkstemp(dir=os.path.dirname(b_dest))
 
                     shutil.copyfile(b_src, b_mysrc)
                     try:
@@ -812,9 +814,8 @@ def main():
     if backup_file:
         res_args['backup_file'] = backup_file
 
-    if not module.check_mode:
-        file_args = module.load_file_common_arguments(module.params, path=dest)
-        res_args['changed'] = module.set_fs_attributes_if_different(file_args, res_args['changed'])
+    file_args = module.load_file_common_arguments(module.params, path=dest)
+    res_args['changed'] = module.set_fs_attributes_if_different(file_args, res_args['changed'])
 
     module.exit_json(**res_args)
 

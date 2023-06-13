@@ -21,7 +21,6 @@ from ....docker_util import (
 )
 
 from ....containers import (
-    CleanupMode,
     run_support_container,
     wait_for_file,
 )
@@ -36,12 +35,10 @@ from . import (
 class CsCloudProvider(CloudProvider):
     """CloudStack cloud provider plugin. Sets up cloud resources before delegation."""
 
-    DOCKER_SIMULATOR_NAME = 'cloudstack-sim'
-
     def __init__(self, args: IntegrationConfig) -> None:
         super().__init__(args)
 
-        self.image = os.environ.get('ANSIBLE_CLOUDSTACK_CONTAINER', 'quay.io/ansible/cloudstack-test-container:1.5.0')
+        self.image = os.environ.get('ANSIBLE_CLOUDSTACK_CONTAINER', 'quay.io/ansible/cloudstack-test-container:1.6.0')
         self.host = ''
         self.port = 0
 
@@ -96,10 +93,8 @@ class CsCloudProvider(CloudProvider):
             self.args,
             self.platform,
             self.image,
-            self.DOCKER_SIMULATOR_NAME,
+            'cloudstack-sim',
             ports,
-            allow_existing=True,
-            cleanup=CleanupMode.YES,
         )
 
         if not descriptor:
@@ -107,7 +102,7 @@ class CsCloudProvider(CloudProvider):
 
         # apply work-around for OverlayFS issue
         # https://github.com/docker/for-linux/issues/72#issuecomment-319904698
-        docker_exec(self.args, self.DOCKER_SIMULATOR_NAME, ['find', '/var/lib/mysql', '-type', 'f', '-exec', 'touch', '{}', ';'], capture=True)
+        docker_exec(self.args, descriptor.name, ['find', '/var/lib/mysql', '-type', 'f', '-exec', 'touch', '{}', ';'], capture=True)
 
         if self.args.explain:
             values = dict(
@@ -115,10 +110,10 @@ class CsCloudProvider(CloudProvider):
                 PORT=str(self.port),
             )
         else:
-            credentials = self._get_credentials(self.DOCKER_SIMULATOR_NAME)
+            credentials = self._get_credentials(descriptor.name)
 
             values = dict(
-                HOST=self.DOCKER_SIMULATOR_NAME,
+                HOST=descriptor.name,
                 PORT=str(self.port),
                 KEY=credentials['apikey'],
                 SECRET=credentials['secretkey'],

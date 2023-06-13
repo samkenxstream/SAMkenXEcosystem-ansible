@@ -26,6 +26,8 @@ attributes:
         platforms: debian
 notes:
     - This module supports Debian Squeeze (version 6) as well as its successors and derivatives.
+seealso:
+  - module: ansible.builtin.deb822_repository
 options:
     repo:
         description:
@@ -138,11 +140,11 @@ EXAMPLES = '''
     - name: somerepo |no apt key
       ansible.builtin.get_url:
         url: https://download.example.com/linux/ubuntu/gpg
-        dest: /etc/apt/trusted.gpg.d/somerepo.asc
+        dest: /etc/apt/keyrings/somerepo.asc
 
     - name: somerepo | apt source
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/trusted.gpg.d/myrepo.asc] https://download.example.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/myrepo.asc] https://download.example.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
 '''
 
@@ -180,9 +182,11 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.respawn import has_respawned, probe_interpreters_for_module, respawn_module
-from ansible.module_utils._text import to_native
+from ansible.module_utils.common.text.converters import to_native
 from ansible.module_utils.six import PY3
 from ansible.module_utils.urls import fetch_url
+
+from ansible.module_utils.common.locale import get_best_parsable_locale
 
 try:
     import apt
@@ -491,8 +495,11 @@ class UbuntuSourcesList(SourcesList):
     def _key_already_exists(self, key_fingerprint):
 
         if self.apt_key_bin:
+            locale = get_best_parsable_locale(self.module)
+            APT_ENV = dict(LANG=locale, LC_ALL=locale, LC_MESSAGES=locale, LC_CTYPE=locale)
+            self.module.run_command_environ_update = APT_ENV
             rc, out, err = self.module.run_command([self.apt_key_bin, 'export', key_fingerprint], check_rc=True)
-            found = len(err) == 0
+            found = bool(not err or 'nothing exported' not in err)
         else:
             found = self._gpg_key_exists(key_fingerprint)
 

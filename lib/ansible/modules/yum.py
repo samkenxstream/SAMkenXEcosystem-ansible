@@ -23,10 +23,11 @@ options:
     description:
       - This module supports C(yum) (as it always has), this is known as C(yum3)/C(YUM3)/C(yum-deprecated) by
         upstream yum developers. As of Ansible 2.7+, this module also supports C(YUM4), which is the
-        "new yum" and it has an C(dnf) backend.
+        "new yum" and it has an C(dnf) backend. As of ansible-core 2.15+, C(dnf) will auto select the backend
+        based on the C(ansible_pkg_mgr) fact.
       - By default, this module will select the backend based on the C(ansible_pkg_mgr) fact.
     default: "auto"
-    choices: [ auto, yum, yum4, dnf ]
+    choices: [ auto, yum, yum4, dnf, dnf4, dnf5 ]
     type: str
     version_added: "2.7"
   name:
@@ -407,7 +408,7 @@ EXAMPLES = '''
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.respawn import has_respawned, respawn_module
-from ansible.module_utils._text import to_native, to_text
+from ansible.module_utils.common.text.converters import to_native, to_text
 from ansible.module_utils.yumdnf import YumDnf, yumdnf_argument_spec
 
 import errno
@@ -617,7 +618,7 @@ class YumModule(YumDnf):
         if not repoq:
             pkgs = []
             try:
-                e, m, _ = self.yum_base.rpmdb.matchPackageNames([pkgspec])
+                e, m, dummy = self.yum_base.rpmdb.matchPackageNames([pkgspec])
                 pkgs = e + m
                 if not pkgs and not is_pkg:
                     pkgs.extend(self.yum_base.returnInstalledPackagesByDep(pkgspec))
@@ -669,7 +670,7 @@ class YumModule(YumDnf):
 
             pkgs = []
             try:
-                e, m, _ = self.yum_base.pkgSack.matchPackageNames([pkgspec])
+                e, m, dummy = self.yum_base.pkgSack.matchPackageNames([pkgspec])
                 pkgs = e + m
                 if not pkgs:
                     pkgs.extend(self.yum_base.returnPackagesByDep(pkgspec))
@@ -709,7 +710,7 @@ class YumModule(YumDnf):
                 pkgs = self.yum_base.returnPackagesByDep(pkgspec) + \
                     self.yum_base.returnInstalledPackagesByDep(pkgspec)
                 if not pkgs:
-                    e, m, _ = self.yum_base.pkgSack.matchPackageNames([pkgspec])
+                    e, m, dummy = self.yum_base.pkgSack.matchPackageNames([pkgspec])
                     pkgs = e + m
                 updates = self.yum_base.doPackageLists(pkgnarrow='updates').updates
             except Exception as e:
@@ -927,7 +928,7 @@ class YumModule(YumDnf):
         cmd = repoq + ["--qf", qf, "-a"]
         if self.releasever:
             cmd.extend(['--releasever=%s' % self.releasever])
-        rc, out, _ = self.module.run_command(cmd)
+        rc, out, err = self.module.run_command(cmd)
         if rc == 0:
             return set(p for p in out.split('\n') if p.strip())
         else:
@@ -1418,7 +1419,7 @@ class YumModule(YumDnf):
                     # this contains the full NVR and spec could contain wildcards
                     # or virtual provides (like "python-*" or "smtp-daemon") while
                     # updates contains name only.
-                    pkgname, _, _, _, _ = splitFilename(pkg)
+                    (pkgname, ver, rel, epoch, arch) = splitFilename(pkg)
                     if spec in pkgs['update'] and pkgname in updates:
                         nothing_to_do = False
                         will_update.add(spec)
@@ -1806,7 +1807,7 @@ def main():
     #   list=repos
     #   list=pkgspec
 
-    yumdnf_argument_spec['argument_spec']['use_backend'] = dict(default='auto', choices=['auto', 'yum', 'yum4', 'dnf'])
+    yumdnf_argument_spec['argument_spec']['use_backend'] = dict(default='auto', choices=['auto', 'yum', 'yum4', 'dnf', 'dnf4', 'dnf5'])
 
     module = AnsibleModule(
         **yumdnf_argument_spec

@@ -27,7 +27,7 @@ from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
 from ansible.module_utils.errors import UnsupportedError
 from ansible.module_utils.json_utils import _filter_non_json_lines
 from ansible.module_utils.six import binary_type, string_types, text_type
-from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 from ansible.parsing.utils.jsonify import jsonify
 from ansible.release import __version__
 from ansible.utils.collection_loader import resource_from_fqcr
@@ -37,6 +37,18 @@ from ansible.vars.clean import remove_internal_keys
 from ansible.utils.plugin_docs import get_versioned_doclink
 
 display = Display()
+
+
+def _validate_utf8_json(d):
+    if isinstance(d, text_type):
+        # Purposefully not using to_bytes here for performance reasons
+        d.encode(encoding='utf-8', errors='strict')
+    elif isinstance(d, dict):
+        for o in d.items():
+            _validate_utf8_json(o)
+    elif isinstance(d, (list, tuple)):
+        for o in d:
+            _validate_utf8_json(o)
 
 
 class ActionBase(ABC):
@@ -51,6 +63,13 @@ class ActionBase(ABC):
     # A set of valid arguments
     _VALID_ARGS = frozenset([])  # type: frozenset[str]
 
+    # behavioral attributes
+    BYPASS_HOST_LOOP = False
+    TRANSFERS_FILES = False
+    _requires_connection = True
+    _supports_check_mode = True
+    _supports_async = False
+
     def __init__(self, task, connection, play_context, loader, templar, shared_loader_obj):
         self._task = task
         self._connection = connection
@@ -60,19 +79,15 @@ class ActionBase(ABC):
         self._shared_loader_obj = shared_loader_obj
         self._cleanup_remote_tmp = False
 
-        self._supports_check_mode = True
-        self._supports_async = False
-
         # interpreter discovery state
         self._discovered_interpreter_key = None
         self._discovered_interpreter = False
         self._discovery_deprecation_warnings = []
         self._discovery_warnings = []
+        self._used_interpreter = None
 
         # Backwards compat: self._display isn't really needed, just import the global display and use that.
         self._display = display
-
-        self._used_interpreter = None
 
     @abstractmethod
     def run(self, tmp=None, task_vars=None):
@@ -284,7 +299,8 @@ class ActionBase(ABC):
             try:
                 (module_data, module_style, module_shebang) = modify_module(module_name, module_path, module_args, self._templar,
                                                                             task_vars=use_vars,
-                                                                            module_compression=self._play_context.module_compression,
+                                                                            module_compression=C.config.get_config_value('DEFAULT_MODULE_COMPRESSION',
+                                                                                                                         variables=task_vars),
                                                                             async_timeout=self._task.async_val,
                                                                             environment=final_environment,
                                                                             remote_is_local=bool(getattr(self._connection, '_remote_is_local', False)),
@@ -861,38 +877,6 @@ class ActionBase(ABC):
 
         return mystat['stat']
 
-    def _remote_checksum(self, path, all_vars, follow=False):
-        """Deprecated. Use _execute_remote_stat() instead.
-
-        Produces a remote checksum given a path,
-        Returns a number 0-4 for specific errors instead of checksum, also ensures it is different
-        0 = unknown error
-        1 = file does not exist, this might not be an error
-        2 = permissions issue
-        3 = its a directory, not a file
-        4 = stat module failed, likely due to not finding python
-        5 = appropriate json module not found
-        """
-        self._display.deprecated("The '_remote_checksum()' method is deprecated. "
-                                 "The plugin author should update the code to use '_execute_remote_stat()' instead", "2.16")
-        x = "0"  # unknown error has occurred
-        try:
-            remote_stat = self._execute_remote_stat(path, all_vars, follow=follow)
-            if remote_stat['exists'] and remote_stat['isdir']:
-                x = "3"  # its a directory not a file
-            else:
-                x = remote_stat['checksum']  # if 1, file is missing
-        except AnsibleError as e:
-            errormsg = to_text(e)
-            if errormsg.endswith(u'Permission denied'):
-                x = "2"  # cannot read file
-            elif errormsg.endswith(u'MODULE FAILURE'):
-                x = "4"  # python not found or module uncaught exception
-            elif 'json' in errormsg:
-                x = "5"  # json module needed
-        finally:
-            return x  # pylint: disable=lost-exception
-
     def _remote_expand_user(self, path, sudoable=True, pathsep=None):
         ''' takes a remote path and performs tilde/$HOME expansion on the remote host '''
 
@@ -1232,6 +1216,18 @@ class ActionBase(ABC):
                 display.warning(w)
 
             data = json.loads(filtered_output)
+
+            if C.MODULE_STRICT_UTF8_RESPONSE and not data.pop('_ansible_trusted_utf8', None):
+                try:
+                    _validate_utf8_json(data)
+                except UnicodeEncodeError:
+                    # When removing this, also remove the loop and latin-1 from ansible.module_utils.common.text.converters.jsonify
+                    display.deprecated(
+                        f'Module "{self._task.resolved_action or self._task.action}" returned non UTF-8 data in '
+                        'the JSON response. This will become an error in the future',
+                        version='2.18',
+                    )
+
             data['_ansible_parsed'] = True
         except ValueError:
             # not valid json, lets try to capture error

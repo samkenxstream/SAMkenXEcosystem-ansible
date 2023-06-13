@@ -40,6 +40,14 @@ attributes:
     raw:
       support: full
 options:
+  expand_argument_vars:
+    description:
+      - Expands the arguments that are variables, for example C($HOME) will be expanded before being passed to the
+        command to run.
+      - Set to C(false) to disable expansion and treat the value as a literal argument.
+    type: bool
+    default: true
+    version_added: "2.16"
   free_form:
     description:
       - The command module takes a free form string as a command to run.
@@ -101,6 +109,8 @@ notes:
     -  The C(executable) parameter is removed since version 2.4. If you have a need for this parameter, use the M(ansible.builtin.shell) module instead.
     -  For Windows targets, use the M(ansible.windows.win_command) module instead.
     -  For rebooting systems, use the M(ansible.builtin.reboot) or M(ansible.windows.win_reboot) module.
+    -  If the command returns non UTF-8 data, it must be encoded to avoid issues. This may necessitate using M(ansible.builtin.shell) so the output
+       can be piped through C(base64).
 seealso:
 - module: ansible.builtin.raw
 - module: ansible.builtin.script
@@ -150,6 +160,17 @@ EXAMPLES = r'''
       - Username with whitespace
       - dbname with whitespace
     creates: /path/to/database
+
+- name: Run command using argv with mixed argument formats
+  ansible.builtin.command:
+    argv:
+      - /path/to/binary
+      - -v
+      - --debug
+      - --longopt
+      - value for longopt
+      - --other-longopt=value for other longopt
+      - positional
 
 - name: Safely use templated variable to run command. Always use the quote filter to avoid injection issues
   ansible.builtin.command: cat {{ myfile|quote }}
@@ -217,7 +238,7 @@ import os
 import shlex
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils._text import to_native, to_bytes, to_text
+from ansible.module_utils.common.text.converters import to_native, to_bytes, to_text
 from ansible.module_utils.common.collections import is_iterable
 
 
@@ -233,6 +254,7 @@ def main():
             argv=dict(type='list', elements='str'),
             chdir=dict(type='path'),
             executable=dict(),
+            expand_argument_vars=dict(type='bool', default=True),
             creates=dict(type='path'),
             removes=dict(type='path'),
             # The default for this really comes from the action plugin
@@ -252,6 +274,7 @@ def main():
     stdin = module.params['stdin']
     stdin_add_newline = module.params['stdin_add_newline']
     strip = module.params['strip_empty_ends']
+    expand_argument_vars = module.params['expand_argument_vars']
 
     # we promissed these in 'always' ( _lines get autoaded on action plugin)
     r = {'changed': False, 'stdout': '', 'stderr': '', 'rc': None, 'cmd': None, 'start': None, 'end': None, 'delta': None, 'msg': ''}
@@ -319,7 +342,8 @@ def main():
     if not module.check_mode:
         r['start'] = datetime.datetime.now()
         r['rc'], r['stdout'], r['stderr'] = module.run_command(args, executable=executable, use_unsafe_shell=shell, encoding=None,
-                                                               data=stdin, binary_data=(not stdin_add_newline))
+                                                               data=stdin, binary_data=(not stdin_add_newline),
+                                                               expand_user_and_vars=expand_argument_vars)
         r['end'] = datetime.datetime.now()
     else:
         # this is partial check_mode support, since we end up skipping if we get here

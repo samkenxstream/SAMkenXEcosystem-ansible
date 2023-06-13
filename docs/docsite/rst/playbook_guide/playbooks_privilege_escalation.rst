@@ -23,10 +23,10 @@ Become directives
 You can set the directives that control ``become`` at the play or task level. You can override these by setting connection variables, which often differ from one host to another. These variables and directives are independent. For example, setting ``become_user`` does not set ``become``.
 
 become
-    set to ``yes`` to activate privilege escalation.
+    set to ``true`` to activate privilege escalation.
 
 become_user
-    set to user with desired privileges — the user you `become`, NOT the user you login as. Does NOT imply ``become: yes``, to allow it to be set at host level. Default value is ``root``.
+    set to user with desired privileges — the user you `become`, NOT the user you login as. Does NOT imply ``become: true``, to allow it to be set at host level. Default value is ``root``.
 
 become_method
     (at play or task level) overrides the default method set in ansible.cfg, set to use any of the :ref:`become_plugins`.
@@ -79,7 +79,7 @@ ansible_become_method
     which privilege escalation method should be used
 
 ansible_become_user
-    set the user you become through privilege escalation; does not imply ``ansible_become: yes``
+    set the user you become through privilege escalation; does not imply ``ansible_become: true``
 
 ansible_become_password
     set the privilege escalation password. See :ref:`playbooks_vault` for details on how to avoid having secrets in plain text
@@ -91,7 +91,7 @@ For example, if you want to run all tasks as ``root`` on a server named ``webser
 
 .. code-block:: text
 
-    webserver ansible_user=manager ansible_become=yes
+    webserver ansible_user=manager ansible_become=true
 
 .. note::
     The variables defined above are generic for all become plugins but plugin specific ones can also be set instead.
@@ -300,7 +300,7 @@ As of version 2.6, Ansible supports ``become`` for privilege escalation (enterin
 
 You must set the connection type to either ``connection: ansible.netcommon.network_cli`` or ``connection: ansible.netcommon.httpapi`` to use ``become`` for privilege escalation on network devices. Check the :ref:`platform_options` documentation for details.
 
-You can use escalated privileges on only the specific tasks that need them, on an entire play, or on all plays. Adding ``become: yes`` and ``become_method: enable`` instructs Ansible to enter ``enable`` mode before executing the task, play, or playbook where those parameters are set.
+You can use escalated privileges on only the specific tasks that need them, on an entire play, or on all plays. Adding ``become: true`` and ``become_method: enable`` instructs Ansible to enter ``enable`` mode before executing the task, play, or playbook where those parameters are set.
 
 If you see this error message, the task that generated it requires ``enable`` mode to succeed:
 

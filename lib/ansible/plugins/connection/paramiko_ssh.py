@@ -22,15 +22,38 @@ DOCUMENTATION = """
         description:
             - Address of the remote target
         default: inventory_hostname
+        type: string
         vars:
             - name: inventory_hostname
             - name: ansible_host
             - name: ansible_ssh_host
             - name: ansible_paramiko_host
+      port:
+          description: Remote port to connect to.
+          type: int
+          default: 22
+          ini:
+            - section: defaults
+              key: remote_port
+            - section: paramiko_connection
+              key: remote_port
+              version_added: '2.15'
+          env:
+            - name: ANSIBLE_REMOTE_PORT
+            - name: ANSIBLE_REMOTE_PARAMIKO_PORT
+              version_added: '2.15'
+          vars:
+            - name: ansible_port
+            - name: ansible_ssh_port
+            - name: ansible_paramiko_port
+              version_added: '2.15'
+          keyword:
+            - name: port
       remote_user:
         description:
             - User to login/authenticate as
             - Can be set from the CLI via the C(--user) or C(-u) options.
+        type: string
         vars:
             - name: ansible_user
             - name: ansible_ssh_user
@@ -51,6 +74,7 @@ DOCUMENTATION = """
         description:
           - Secret used to either login the ssh server or as a passphrase for ssh keys that require it
           - Can be set from the CLI via the C(--ask-pass) option.
+        type: string
         vars:
             - name: ansible_password
             - name: ansible_ssh_pass
@@ -90,6 +114,7 @@ DOCUMENTATION = """
         description:
             - Proxy information for running the connection via a jumphost
             - Also this plugin will scan 'ssh_args', 'ssh_extra_args' and 'ssh_common_args' from the 'ssh' plugin settings for proxy information if set.
+        type: string
         env: [{name: ANSIBLE_PARAMIKO_PROXY_COMMAND}]
         ini:
           - {key: proxy_command, section: paramiko_connection}
@@ -99,6 +124,7 @@ DOCUMENTATION = """
       ssh_args:
           description: Only used in parsing ProxyCommand for use in this plugin.
           default: ''
+          type: string
           ini:
               - section: 'ssh_connection'
                 key: 'ssh_args'
@@ -113,6 +139,7 @@ DOCUMENTATION = """
               alternatives: proxy_command
       ssh_common_args:
           description: Only used in parsing ProxyCommand for use in this plugin.
+          type: string
           ini:
               - section: 'ssh_connection'
                 key: 'ssh_common_args'
@@ -131,6 +158,7 @@ DOCUMENTATION = """
               alternatives: proxy_command
       ssh_extra_args:
           description: Only used in parsing ProxyCommand for use in this plugin.
+          type: string
           vars:
               - name: ansible_ssh_extra_args
           env:
@@ -209,8 +237,54 @@ DOCUMENTATION = """
             key: banner_timeout
         env:
           - name: ANSIBLE_PARAMIKO_BANNER_TIMEOUT
-# TODO:
-#timeout=self._play_context.timeout,
+      timeout:
+        type: int
+        default: 10
+        description: Number of seconds until the plugin gives up on failing to establish a TCP connection.
+        ini:
+          - section: defaults
+            key: timeout
+          - section: ssh_connection
+            key: timeout
+            version_added: '2.11'
+          - section: paramiko_connection
+            key: timeout
+            version_added: '2.15'
+        env:
+          - name: ANSIBLE_TIMEOUT
+          - name: ANSIBLE_SSH_TIMEOUT
+            version_added: '2.11'
+          - name: ANSIBLE_PARAMIKO_TIMEOUT
+            version_added: '2.15'
+        vars:
+          - name: ansible_ssh_timeout
+            version_added: '2.11'
+          - name: ansible_paramiko_timeout
+            version_added: '2.15'
+        cli:
+          - name: timeout
+      private_key_file:
+          description:
+              - Path to private key file to use for authentication.
+          type: string
+          ini:
+            - section: defaults
+              key: private_key_file
+            - section: paramiko_connection
+              key: private_key_file
+              version_added: '2.15'
+          env:
+            - name: ANSIBLE_PRIVATE_KEY_FILE
+            - name: ANSIBLE_PARAMIKO_PRIVATE_KEY_FILE
+              version_added: '2.15'
+          vars:
+            - name: ansible_private_key_file
+            - name: ansible_ssh_private_key_file
+            - name: ansible_paramiko_private_key_file
+              version_added: '2.15'
+          cli:
+            - name: private_key_file
+              option: '--private-key'
 """
 
 import os
@@ -233,7 +307,7 @@ from ansible.module_utils.compat.paramiko import PARAMIKO_IMPORT_ERR, paramiko
 from ansible.plugins.connection import ConnectionBase
 from ansible.utils.display import Display
 from ansible.utils.path import makedirs_safe
-from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 
 display = Display()
 
@@ -264,7 +338,7 @@ class MyAddPolicy(object):
 
     def missing_host_key(self, client, hostname, key):
 
-        if all((self._options['host_key_checking'], not self._options['host_key_auto_add'])):
+        if all((self.connection.get_option('host_key_checking'), not self.connection.get_option('host_key_auto_add'))):
 
             fingerprint = hexlify(key.get_fingerprint())
             ktype = key.get_name()
@@ -304,7 +378,7 @@ class Connection(ConnectionBase):
     _log_channel = None
 
     def _cache_key(self):
-        return "%s__%s__" % (self._play_context.remote_addr, self._play_context.remote_user)
+        return "%s__%s__" % (self.get_option('remote_addr'), self.get_option('remote_user'))
 
     def _connect(self):
         cache_key = self._cache_key()
@@ -349,15 +423,15 @@ class Connection(ConnectionBase):
         sock_kwarg = {}
         if proxy_command:
             replacers = {
-                '%h': self._play_context.remote_addr,
+                '%h': self.get_option('remote_addr'),
                 '%p': port,
-                '%r': self._play_context.remote_user
+                '%r': self.get_option('remote_user')
             }
             for find, replace in replacers.items():
                 proxy_command = proxy_command.replace(find, str(replace))
             try:
                 sock_kwarg = {'sock': paramiko.ProxyCommand(proxy_command)}
-                display.vvv("CONFIGURE PROXY COMMAND FOR CONNECTION: %s" % proxy_command, host=self._play_context.remote_addr)
+                display.vvv("CONFIGURE PROXY COMMAND FOR CONNECTION: %s" % proxy_command, host=self.get_option('remote_addr'))
             except AttributeError:
                 display.warning('Paramiko ProxyCommand support unavailable. '
                                 'Please upgrade to Paramiko 1.9.0 or newer. '
@@ -371,9 +445,9 @@ class Connection(ConnectionBase):
         if paramiko is None:
             raise AnsibleError("paramiko is not installed: %s" % to_native(PARAMIKO_IMPORT_ERR))
 
-        port = self._play_context.port or 22
-        display.vvv("ESTABLISH PARAMIKO SSH CONNECTION FOR USER: %s on PORT %s TO %s" % (self._play_context.remote_user, port, self._play_context.remote_addr),
-                    host=self._play_context.remote_addr)
+        port = self.get_option('port')
+        display.vvv("ESTABLISH PARAMIKO SSH CONNECTION FOR USER: %s on PORT %s TO %s" % (self.get_option('remote_user'), port, self.get_option('remote_addr')),
+                    host=self.get_option('remote_addr'))
 
         ssh = paramiko.SSHClient()
 
@@ -409,7 +483,7 @@ class Connection(ConnectionBase):
 
         ssh.set_missing_host_key_policy(MyAddPolicy(self))
 
-        conn_password = self.get_option('password') or self._play_context.password
+        conn_password = self.get_option('password')
 
         allow_agent = True
 
@@ -418,25 +492,25 @@ class Connection(ConnectionBase):
 
         try:
             key_filename = None
-            if self._play_context.private_key_file:
-                key_filename = os.path.expanduser(self._play_context.private_key_file)
+            if self.get_option('private_key_file'):
+                key_filename = os.path.expanduser(self.get_option('private_key_file'))
 
             # paramiko 2.2 introduced auth_timeout parameter
             if LooseVersion(paramiko.__version__) >= LooseVersion('2.2.0'):
-                ssh_connect_kwargs['auth_timeout'] = self._play_context.timeout
+                ssh_connect_kwargs['auth_timeout'] = self.get_option('timeout')
 
             # paramiko 1.15 introduced banner timeout parameter
             if LooseVersion(paramiko.__version__) >= LooseVersion('1.15.0'):
                 ssh_connect_kwargs['banner_timeout'] = self.get_option('banner_timeout')
 
             ssh.connect(
-                self._play_context.remote_addr.lower(),
-                username=self._play_context.remote_user,
+                self.get_option('remote_addr').lower(),
+                username=self.get_option('remote_user'),
                 allow_agent=allow_agent,
                 look_for_keys=self.get_option('look_for_keys'),
                 key_filename=key_filename,
                 password=conn_password,
-                timeout=self._play_context.timeout,
+                timeout=self.get_option('timeout'),
                 port=port,
                 disabled_algorithms=disabled_algorithms,
                 **ssh_connect_kwargs,
@@ -452,7 +526,7 @@ class Connection(ConnectionBase):
                 raise AnsibleError("paramiko version issue, please upgrade paramiko on the machine running ansible")
             elif u"Private key file is encrypted" in msg:
                 msg = 'ssh %s@%s:%s : %s\nTo connect as a different user, use -u <username>.' % (
-                    self._play_context.remote_user, self._play_context.remote_addr, port, msg)
+                    self.get_option('remote_user'), self.get_options('remote_addr'), port, msg)
                 raise AnsibleConnectionFailure(msg)
             else:
                 raise AnsibleConnectionFailure(msg)
@@ -485,7 +559,7 @@ class Connection(ConnectionBase):
         if self.get_option('pty') and sudoable:
             chan.get_pty(term=os.getenv('TERM', 'vt100'), width=int(os.getenv('COLUMNS', 0)), height=int(os.getenv('LINES', 0)))
 
-        display.vvv("EXEC %s" % cmd, host=self._play_context.remote_addr)
+        display.vvv("EXEC %s" % cmd, host=self.get_option('remote_addr'))
 
         cmd = to_bytes(cmd, errors='surrogate_or_strict')
 
@@ -505,8 +579,7 @@ class Connection(ConnectionBase):
                     display.debug("chunk is: %s" % chunk)
                     if not chunk:
                         if b'unknown user' in become_output:
-                            n_become_user = to_native(self.become.get_option('become_user',
-                                                                             playcontext=self._play_context))
+                            n_become_user = to_native(self.become.get_option('become_user'))
                             raise AnsibleError('user %s does not exist' % n_become_user)
                         else:
                             break
@@ -515,17 +588,17 @@ class Connection(ConnectionBase):
 
                     # need to check every line because we might get lectured
                     # and we might get the middle of a line in a chunk
-                    for l in become_output.splitlines(True):
-                        if self.become.check_success(l):
+                    for line in become_output.splitlines(True):
+                        if self.become.check_success(line):
                             become_sucess = True
                             break
-                        elif self.become.check_password_prompt(l):
+                        elif self.become.check_password_prompt(line):
                             passprompt = True
                             break
 
                 if passprompt:
                     if self.become:
-                        become_pass = self.become.get_option('become_pass', playcontext=self._play_context)
+                        become_pass = self.become.get_option('become_pass')
                         chan.sendall(to_bytes(become_pass, errors='surrogate_or_strict') + b'\n')
                     else:
                         raise AnsibleError("A password is required but none was supplied")
@@ -545,7 +618,7 @@ class Connection(ConnectionBase):
 
         super(Connection, self).put_file(in_path, out_path)
 
-        display.vvv("PUT %s TO %s" % (in_path, out_path), host=self._play_context.remote_addr)
+        display.vvv("PUT %s TO %s" % (in_path, out_path), host=self.get_option('remote_addr'))
 
         if not os.path.exists(to_bytes(in_path, errors='surrogate_or_strict')):
             raise AnsibleFileNotFound("file or module does not exist: %s" % in_path)
@@ -562,7 +635,7 @@ class Connection(ConnectionBase):
 
     def _connect_sftp(self):
 
-        cache_key = "%s__%s__" % (self._play_context.remote_addr, self._play_context.remote_user)
+        cache_key = "%s__%s__" % (self.get_option('remote_addr'), self.get_option('remote_user'))
         if cache_key in SFTP_CONNECTION_CACHE:
             return SFTP_CONNECTION_CACHE[cache_key]
         else:
@@ -574,7 +647,7 @@ class Connection(ConnectionBase):
 
         super(Connection, self).fetch_file(in_path, out_path)
 
-        display.vvv("FETCH %s TO %s" % (in_path, out_path), host=self._play_context.remote_addr)
+        display.vvv("FETCH %s TO %s" % (in_path, out_path), host=self.get_option('remote_addr'))
 
         try:
             self.sftp = self._connect_sftp()

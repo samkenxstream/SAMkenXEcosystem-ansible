@@ -7,21 +7,46 @@ IFS='/:' read -ra args <<< "$1"
 
 group="${args[1]}"
 
-if [ "${BASE_BRANCH:-}" ]; then
-    base_branch="origin/${BASE_BRANCH}"
-else
-    base_branch=""
-fi
+group2_include=(
+    ansible-doc
+    changelog
+    package-data
+    pep8
+    pylint
+    validate-modules
+)
+
+group3_include=(
+    docs-build
+    sanity-docs
+)
+
+group1_exclude=(
+    "${group2_include[@]}"
+    "${group3_include[@]}"
+)
+
+options=()
 
 case "${group}" in
-    1) options=(--skip-test pylint --skip-test ansible-doc --skip-test docs-build --skip-test package-data --skip-test changelog --skip-test validate-modules) ;;
-    2) options=(                   --test      ansible-doc --test      docs-build --test      package-data --test      changelog) ;;
-    3) options=(--test pylint --exclude test/units/ --exclude lib/ansible/module_utils/) ;;
-    4) options=(--test pylint           test/units/           lib/ansible/module_utils/) ;;
-    5) options=(                                                                                                                 --test validate-modules) ;;
+    1)
+        for name in "${group1_exclude[@]}"; do
+            options+=(--skip-test "${name}")
+        done
+        ;;
+    2)
+        for name in "${group2_include[@]}"; do
+            options+=(--test "${name}")
+        done
+        ;;
+    3)
+        for name in "${group3_include[@]}"; do
+            options+=(--test "${name}")
+        done
+        ;;
 esac
 
 # shellcheck disable=SC2086
 ansible-test sanity --color -v --junit ${COVERAGE:+"$COVERAGE"} ${CHANGED:+"$CHANGED"} \
-    --docker --keep-git --base-branch "${base_branch}" \
+    --docker \
     "${options[@]}" --allow-disabled

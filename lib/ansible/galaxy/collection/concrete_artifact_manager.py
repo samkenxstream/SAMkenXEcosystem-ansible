@@ -21,15 +21,18 @@ from tempfile import mkdtemp
 
 if t.TYPE_CHECKING:
     from ansible.galaxy.dependency_resolution.dataclasses import (
-        Candidate, Requirement,
+        Candidate, Collection, Requirement,
     )
     from ansible.galaxy.token import GalaxyToken
 
 from ansible.errors import AnsibleError
 from ansible.galaxy import get_collections_galaxy_meta_info
+from ansible.galaxy.api import should_retry_error
 from ansible.galaxy.dependency_resolution.dataclasses import _GALAXY_YAML
 from ansible.galaxy.user_agent import user_agent
-from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
+from ansible.module_utils.api import retry_with_delays_and_condition
+from ansible.module_utils.api import generate_jittered_backoff
 from ansible.module_utils.common.process import get_bin_path
 from ansible.module_utils.common.yaml import yaml_load
 from ansible.module_utils.urls import open_url
@@ -163,6 +166,16 @@ class ConcreteArtifactsManager:
                     download_err=to_native(err),
                 ),
             ) from err
+        except Exception as err:
+            raise AnsibleError(
+                'Failed to download collection tar '
+                "from '{coll_src!s}' due to the following unforeseen error: "
+                '{download_err!s}'.
+                format(
+                    coll_src=to_native(collection.src),
+                    download_err=to_native(err),
+                ),
+            ) from err
         else:
             display.vvv(
                 "Collection '{coll!s}' obtained from "
@@ -177,7 +190,7 @@ class ConcreteArtifactsManager:
         return b_artifact_path
 
     def get_artifact_path(self, collection):
-        # type: (t.Union[Candidate, Requirement]) -> bytes
+        # type: (Collection) -> bytes
         """Given a concrete collection pointer, return a cached path.
 
         If it's not yet on disk, this method downloads the artifact first.
@@ -238,16 +251,22 @@ class ConcreteArtifactsManager:
         self._artifact_cache[collection.src] = b_artifact_path
         return b_artifact_path
 
+    def get_artifact_path_from_unknown(self, collection):
+        # type: (Candidate) -> bytes
+        if collection.is_concrete_artifact:
+            return self.get_artifact_path(collection)
+        return self.get_galaxy_artifact_path(collection)
+
     def _get_direct_collection_namespace(self, collection):
         # type: (Candidate) -> t.Optional[str]
         return self.get_direct_collection_meta(collection)['namespace']  # type: ignore[return-value]
 
     def _get_direct_collection_name(self, collection):
-        # type: (Candidate) -> t.Optional[str]
+        # type: (Collection) -> t.Optional[str]
         return self.get_direct_collection_meta(collection)['name']  # type: ignore[return-value]
 
     def get_direct_collection_fqcn(self, collection):
-        # type: (Candidate) -> t.Optional[str]
+        # type: (Collection) -> t.Optional[str]
         """Extract FQCN from the given on-disk collection artifact.
 
         If the collection is virtual, ``None`` is returned instead
@@ -263,7 +282,7 @@ class ConcreteArtifactsManager:
         ))
 
     def get_direct_collection_version(self, collection):
-        # type: (t.Union[Candidate, Requirement]) -> str
+        # type: (Collection) -> str
         """Extract version from the given on-disk collection artifact."""
         return self.get_direct_collection_meta(collection)['version']  # type: ignore[return-value]
 
@@ -276,7 +295,7 @@ class ConcreteArtifactsManager:
         return collection_dependencies  # type: ignore[return-value]
 
     def get_direct_collection_meta(self, collection):
-        # type: (t.Union[Candidate, Requirement]) -> dict[str, t.Union[str, dict[str, str], list[str], None, t.Type[Sentinel]]]
+        # type: (Collection) -> dict[str, t.Union[str, dict[str, str], list[str], None, t.Type[Sentinel]]]
         """Extract meta from the given on-disk collection artifact."""
         try:  # FIXME: use unique collection identifier as a cache key?
             return self._artifact_meta_cache[collection.src]
@@ -440,6 +459,10 @@ def _extract_collection_from_git(repo_url, coll_ver, b_path):
 
 
 # FIXME: use random subdirs while preserving the file names
+@retry_with_delays_and_condition(
+    backoff_iterator=generate_jittered_backoff(retries=6, delay_base=2, delay_threshold=40),
+    should_retry_error=should_retry_error
+)
 def _download_file(url, b_path, expected_hash, validate_certs, token=None, timeout=60):
     # type: (str, bytes, t.Optional[str], bool, GalaxyToken, int) -> bytes
     # ^ NOTE: used in download and verify_collections ^
@@ -458,13 +481,16 @@ def _download_file(url, b_path, expected_hash, validate_certs, token=None, timeo
     display.display("Downloading %s to %s" % (url, to_text(b_tarball_dir)))
     # NOTE: Galaxy redirects downloads to S3 which rejects the request
     # NOTE: if an Authorization header is attached so don't redirect it
-    resp = open_url(
-        to_native(url, errors='surrogate_or_strict'),
-        validate_certs=validate_certs,
-        headers=None if token is None else token.headers(),
-        unredirected_headers=['Authorization'], http_agent=user_agent(),
-        timeout=timeout
-    )
+    try:
+        resp = open_url(
+            to_native(url, errors='surrogate_or_strict'),
+            validate_certs=validate_certs,
+            headers=None if token is None else token.headers(),
+            unredirected_headers=['Authorization'], http_agent=user_agent(),
+            timeout=timeout
+        )
+    except Exception as err:
+        raise AnsibleError(to_native(err), orig_exc=err)
 
     with open(b_file_path, 'wb') as download_file:  # type: t.BinaryIO
         actual_hash = _consume_file(resp, write_to=download_file)

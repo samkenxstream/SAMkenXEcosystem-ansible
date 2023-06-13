@@ -56,6 +56,9 @@ options:
     contains:
         description:
             - A regular expression or pattern which should be matched against the file content.
+            - If I(read_whole_file) is C(true) it matches against the beginning of the line (uses
+              C(re.match())). If I(read_whole_file) is C(false), it searches anywhere for that pattern
+              (uses C(re.search())).
             - Works only when I(file_type) is C(file).
         type: str
     read_whole_file:
@@ -244,7 +247,7 @@ import re
 import stat
 import time
 
-from ansible.module_utils._text import to_text, to_native
+from ansible.module_utils.common.text.converters import to_text, to_native
 from ansible.module_utils.basic import AnsibleModule
 
 

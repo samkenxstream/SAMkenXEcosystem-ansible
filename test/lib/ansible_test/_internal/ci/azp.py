@@ -44,6 +44,8 @@ class AzurePipelines(CIProvider):
     def __init__(self) -> None:
         self.auth = AzurePipelinesAuthHelper()
 
+        self._changes: AzurePipelinesChanges | None = None
+
     @staticmethod
     def is_supported() -> bool:
         """Return True if this provider is supported in the current running environment."""
@@ -68,22 +70,24 @@ class AzurePipelines(CIProvider):
                 os.environ['SYSTEM_JOBIDENTIFIER'],
             )
         except KeyError as ex:
-            raise MissingEnvironmentVariable(name=ex.args[0])
+            raise MissingEnvironmentVariable(name=ex.args[0]) from None
 
         return prefix
 
-    def get_base_branch(self) -> str:
-        """Return the base branch or an empty string."""
-        base_branch = os.environ.get('SYSTEM_PULLREQUEST_TARGETBRANCH') or os.environ.get('BUILD_SOURCEBRANCHNAME')
+    def get_base_commit(self, args: CommonConfig) -> str:
+        """Return the base commit or an empty string."""
+        return self._get_changes(args).base_commit or ''
 
-        if base_branch:
-            base_branch = 'origin/%s' % base_branch
+    def _get_changes(self, args: CommonConfig) -> AzurePipelinesChanges:
+        """Return an AzurePipelinesChanges instance, which will be created on first use."""
+        if not self._changes:
+            self._changes = AzurePipelinesChanges(args)
 
-        return base_branch or ''
+        return self._changes
 
     def detect_changes(self, args: TestConfig) -> t.Optional[list[str]]:
         """Initialize change detection."""
-        result = AzurePipelinesChanges(args)
+        result = self._get_changes(args)
 
         if result.is_pr:
             job_type = 'pull request'
@@ -117,7 +121,7 @@ class AzurePipelines(CIProvider):
                 task_id=str(uuid.UUID(os.environ['SYSTEM_TASKINSTANCEID'])),
             )
         except KeyError as ex:
-            raise MissingEnvironmentVariable(name=ex.args[0])
+            raise MissingEnvironmentVariable(name=ex.args[0]) from None
 
         self.auth.sign_request(request)
 
@@ -129,7 +133,7 @@ class AzurePipelines(CIProvider):
 
     def get_git_details(self, args: CommonConfig) -> t.Optional[dict[str, t.Any]]:
         """Return details about git in the current environment."""
-        changes = AzurePipelinesChanges(args)
+        changes = self._get_changes(args)
 
         details = dict(
             base_commit=changes.base_commit,
@@ -150,7 +154,7 @@ class AzurePipelinesAuthHelper(CryptographyAuthHelper):
         try:
             agent_temp_directory = os.environ['AGENT_TEMPDIRECTORY']
         except KeyError as ex:
-            raise MissingEnvironmentVariable(name=ex.args[0])
+            raise MissingEnvironmentVariable(name=ex.args[0]) from None
 
         # the temporary file cannot be deleted because we do not know when the agent has processed it
         # placing the file in the agent's temp directory allows it to be picked up when the job is running in a container
@@ -177,7 +181,7 @@ class AzurePipelinesChanges:
             self.source_branch_name = os.environ['BUILD_SOURCEBRANCHNAME']
             self.pr_branch_name = os.environ.get('SYSTEM_PULLREQUEST_TARGETBRANCH')
         except KeyError as ex:
-            raise MissingEnvironmentVariable(name=ex.args[0])
+            raise MissingEnvironmentVariable(name=ex.args[0]) from None
 
         if self.source_branch.startswith('refs/tags/'):
             raise ChangeDetectionNotSupported('Change detection is not supported for tags.')

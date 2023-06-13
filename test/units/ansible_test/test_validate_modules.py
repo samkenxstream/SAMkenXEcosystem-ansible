@@ -1,9 +1,9 @@
 """Tests for validate-modules regexes."""
 from __future__ import annotations
 
-import mock
 import pathlib
 import sys
+from unittest import mock
 
 import pytest
 
@@ -17,6 +17,11 @@ def validate_modules() -> None:
 
     sys.modules['voluptuous'] = voluptuous = mock.MagicMock()
     sys.modules['voluptuous.humanize'] = voluptuous.humanize = mock.MagicMock()
+
+    # Mock out antsibull_docs_parser to facilitate testing without it, since tests aren't covering anything that uses it.
+
+    sys.modules['antsibull_docs_parser'] = antsibull_docs_parser = mock.MagicMock()
+    sys.modules['antsibull_docs_parser.parser'] = antsibull_docs_parser.parser = mock.MagicMock()
 
 
 @pytest.mark.parametrize('cstring,cexpected', [
@@ -52,7 +57,7 @@ def test_type_regex(cstring, cexpected):  # type: (str, str) -> None
 
     match = TYPE_REGEX.match(cstring)
 
-    if cexpected and not match:
-        assert False, "%s should have matched" % cstring
-    elif not cexpected and match:
-        assert False, "%s should not have matched" % cstring
+    if cexpected:
+        assert match, f"should have matched: {cstring}"
+    else:
+        assert not match, f"should not have matched: {cstring}"

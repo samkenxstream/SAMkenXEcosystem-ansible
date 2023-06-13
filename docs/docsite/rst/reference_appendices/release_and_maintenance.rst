@@ -41,8 +41,8 @@ The two community releases are related - the release cycle follows this pattern:
    * Work on new features continues in Collections
    * Individual Collections can make multiple minor and major releases
 
-#. Minor releases of three maintained ansible-core versions every three weeks (2.11.1)
-#. Minor releases of the single maintained Ansible community package version every three weeks (4.1.0)
+#. Minor releases of three maintained ansible-core versions every four weeks (2.11.1)
+#. Minor releases of the single maintained Ansible community package version every four weeks (4.1.0)
 #. Feature freeze on ansible-core
 #. Release candidate for ansible-core, testing, additional release candidates as necessary
 #. Release of the next ansible-core major version, cycle begins again
@@ -50,7 +50,7 @@ The two community releases are related - the release cycle follows this pattern:
 Ansible community package release cycle
 ---------------------------------------
 
-The Ansible community team typically releases two major versions of the community package per year, on a flexible release cycle that trails the release of ``ansible-core``. This cycle can be extended to allow for larger changes to be properly implemented and tested before a new release is made available. See :ref:`ansible_roadmaps` for upcoming release details. Between major versions, we release a new minor version of the Ansible community package every three weeks. Minor releases include new backwards-compatible features, modules and plugins, as well as bug fixes.
+The Ansible community team typically releases two major versions of the community package per year, on a flexible release cycle that trails the release of ``ansible-core``. This cycle can be extended to allow for larger changes to be properly implemented and tested before a new release is made available. See :ref:`ansible_roadmaps` for upcoming release details. Between major versions, we release a new minor version of the Ansible community package every four weeks. Minor releases include new backwards-compatible features, modules and plugins, as well as bug fixes.
 
 Starting with version 2.10, the Ansible community team guarantees maintenance for only one major community package release at a time. For example, when Ansible 4.0.0 gets released, the team will stop making new 3.x releases. Community members may maintain older versions if desired.
 
@@ -71,6 +71,7 @@ Work in Collections is tracked within the individual Collection repositories.
 
 You can refer to the :ref:`Ansible package porting guides<porting_guides>` for tips on updating your playbooks to run on newer versions of Ansible. For Ansible 2.10 and later releases, you can install the Ansible package with ``pip``. See :ref:`intro_installation_guide` for details. You can download older Ansible releases from `<https://releases.ansible.com/ansible/>`_.
 
+.. _ansible_changelogs:
 
 Ansible community changelogs
 ----------------------------
@@ -80,15 +81,17 @@ This table links to the changelogs for each major Ansible release. These changel
 ==================================      ==============================================      =========================
 Ansible Community Package Release       Status                                              Core version dependency
 ==================================      ==============================================      =========================
-8.0.0                                   In development (unreleased)                         2.15
-`7.x Changelogs`_                       Current                                             2.14
-`6.x Changelogs`_                       Unmaintained (end of life) after Ansible 6.7.0      2.13
+9.0.0                                   In development (unreleased)                         2.16
+`8.x Changelogs`_                       Current                                             2.15
+`7.x Changelogs`_                       Unmaintained (end of life) after Ansible 7.7.0      2.14
+`6.x Changelogs`_                       Unmaintained (end of life)                          2.13
 `5.x Changelogs`_                       Unmaintained (end of life)                          2.12
 `4.x Changelogs`_                       Unmaintained (end of life)                          2.11
 `3.x Changelogs`_                       Unmaintained (end of life)                          2.10
 `2.10 Changelogs`_                      Unmaintained (end of life)                          2.10
 ==================================      ==============================================      =========================
 
+.. _8.x Changelogs: https://github.com/ansible-community/ansible-build-data/blob/main/8/CHANGELOG-v8.rst
 .. _7.x Changelogs: https://github.com/ansible-community/ansible-build-data/blob/main/7/CHANGELOG-v7.rst
 .. _6.x Changelogs: https://github.com/ansible-community/ansible-build-data/blob/main/6/CHANGELOG-v6.rst
 .. _5.x Changelogs: https://github.com/ansible-community/ansible-build-data/blob/main/5/CHANGELOG-v5.rst
@@ -131,6 +134,15 @@ Dates listed indicate the start date of the maintenance cycle.
      - End Of Life
      - Controller Python
      - Target Python / PowerShell
+   * - `2.16`
+     - | GA: 06 Nov 2023
+       | Critical: 20 May 2024
+       | Security: Nov 2024
+     - May 2025
+     - | Python 3.10 - 3.12
+     - | Python 2.7
+       | Python 3.6 - 3.12
+       | Powershell TBD
    * - `2.15`_
      - | GA: 22 May 2023
        | Critical: 06 Nov 2023
@@ -162,9 +174,10 @@ Dates listed indicate the start date of the maintenance cycle.
      - | GA: 08 Nov 2021
        | Critical: 23 May 2022
        | Security: 07 Nov 2022
-     - 22 May 2023
+     - | **EOL**
+       | 22 May 2023
      - | Python 3.8 - 3.10
-     - | Python 2.6
+     - | Python 2.6 - 2.7
        | Python 3.5 - 3.10
        | PowerShell 3 - 5.1
    * - `2.11`_
@@ -200,14 +213,6 @@ Dates listed indicate the start date of the maintenance cycle.
      - | Python 2.6 - 2.7
        | Python 3.5 - 3.8
        | PowerShell 3 - 5.1
-..    * - 2.16
-..      - 06 Nov 2023
-..      - 20 May 2024
-..      - Nov 2024
-..      - May 2025
-..      - | Python 3.10 - 3.12
-..      - | Python 3.6 - 3.12
-..        | PowerShell TBD
 ..    * - 2.17
 ..      - 20 May 2024
 ..      - Nov 2024
@@ -331,7 +336,7 @@ The Ansible community develops and maintains the features and functionality incl
 
  * Developers add new features and bug fixes to the individual Collections, following each Collection's rules on contributing.
  * Each new feature and each bug fix includes a changelog fragment describing the work.
- * Release engineers create a minor release for the current version every three weeks to ensure that the latest bug fixes are available to users.
+ * Release engineers create a minor release for the current version every four weeks to ensure that the latest bug fixes are available to users.
  * At the end of the development period, the release engineers announce which Collections, and which major version of each included Collection,  will be included in the next release of the Ansible community package. New Collections and new major versions may not be added after this, and the work of creating a new release begins.
 
 We generally do not provide fixes for unmaintained releases of the Ansible community package, however, there can sometimes be exceptions for critical issues.
@@ -346,7 +351,7 @@ The Ansible community develops and maintains ``ansible-core`` on GitHub_, with a
  * Developers add new features and bug fixes to the ``devel`` branch.
  * Each new feature and each bug fix includes a changelog fragment describing the work.
  * The development team backports bug fixes to one, two, or three stable branches, depending on the severity of the bug. They do not backport new features.
- * Release engineers create a minor release for each maintained version every three weeks to ensure that the latest bug fixes are available to users.
+ * Release engineers create a minor release for each maintained version every four weeks to ensure that the latest bug fixes are available to users.
  * At the end of the development period, the release engineers impose a feature freeze and the work of creating a new release begins.
 
 We generally do not provide fixes for unmaintained releases of ``ansible-core``, however, there can sometimes be exceptions for critical issues.

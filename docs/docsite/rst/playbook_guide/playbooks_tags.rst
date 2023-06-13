@@ -301,7 +301,7 @@ For example:
 
 .. warning::
    * Fact gathering is tagged with 'always' by default. It is only skipped if
-     you apply a tag and then use a different tag in ``--tags`` or the same
+     you apply a tag to the play and then use a different tag in ``--tags`` or the same
      tag in ``--skip-tags``.
 
 .. warning::
@@ -350,6 +350,12 @@ To run all tasks except those tagged ``packages``:
 .. code-block:: bash
 
    ansible-playbook example.yml --skip-tags "packages"
+
+To run all tasks, even those excluded because are tagged ``never``:
+
+.. code-block:: bash
+
+   ansible-playbook example.yml --tags "all,never"
 
 Previewing the results of using tags
 ------------------------------------

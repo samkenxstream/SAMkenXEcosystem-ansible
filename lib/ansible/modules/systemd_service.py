@@ -90,6 +90,8 @@ notes:
     - Before 2.4 you always required C(name).
     - Globs are not supported in name, i.e C(postgres*.service).
     - The service names might vary by specific OS/distribution
+    - The order of execution when having multiple properties is to first enable/disable, then mask/unmask and then deal with service state.
+      It has been reported that systemctl can behave differently depending on the order of operations if you do the same manually.
 requirements:
     - A system managed by systemd.
 '''
@@ -149,7 +151,7 @@ RETURN = '''
 status:
     description: A dictionary with the key=value pairs returned from C(systemctl show).
     returned: success
-    type: complex
+    type: dict
     sample: {
             "ActiveEnterTimestamp": "Sun 2016-05-15 18:28:49 EDT",
             "ActiveEnterTimestampMonotonic": "8135942",
@@ -280,7 +282,7 @@ import os
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.facts.system.chroot import is_chroot
 from ansible.module_utils.service import sysv_exists, sysv_is_enabled, fail_if_missing
-from ansible.module_utils._text import to_native
+from ansible.module_utils.common.text.converters import to_native
 
 
 def is_running_service(service_status):

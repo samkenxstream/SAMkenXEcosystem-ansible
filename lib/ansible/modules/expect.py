@@ -81,6 +81,8 @@ notes:
   - The M(ansible.builtin.expect) module is designed for simple scenarios.
     For more complex needs, consider the use of expect code with the M(ansible.builtin.shell)
     or M(ansible.builtin.script) modules. (An example is part of the M(ansible.builtin.shell) module documentation).
+  - If the command returns non UTF-8 data, it must be encoded to avoid issues. One option is to pipe
+    the output through C(base64).
 seealso:
 - module: ansible.builtin.script
 - module: ansible.builtin.shell
@@ -119,7 +121,7 @@ except ImportError:
     HAS_PEXPECT = False
 
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-from ansible.module_utils._text import to_bytes, to_native
+from ansible.module_utils.common.text.converters import to_bytes, to_native
 
 
 def response_closure(module, question, responses):

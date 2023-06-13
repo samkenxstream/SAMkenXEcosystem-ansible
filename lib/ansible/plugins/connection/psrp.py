@@ -188,7 +188,7 @@ options:
     vars:
     - name: ansible_psrp_ignore_proxy
     type: bool
-    default: 'no'
+    default: false
 
   # auth options
   certificate_key_pem:
@@ -221,7 +221,7 @@ options:
     - Disables the use of TLSv1.2 on the CredSSP authentication channel.
     - This should not be set to C(yes) unless dealing with a host that does not
       have TLSv1.2.
-    default: no
+    default: false
     type: bool
     vars:
     - name: ansible_psrp_credssp_disable_tlsv1_2
@@ -262,7 +262,7 @@ options:
     - CBT is used to provide extra protection against Man in the Middle C(MitM)
       attacks by binding the outer transport channel to the auth channel.
     - CBT is not used when using just C(HTTP), only C(HTTPS).
-    default: yes
+    default: true
     type: bool
     vars:
     - name: ansible_psrp_negotiate_send_cbt
@@ -314,7 +314,7 @@ from ansible import constants as C
 from ansible.errors import AnsibleConnectionFailure, AnsibleError
 from ansible.errors import AnsibleFileNotFound
 from ansible.module_utils.parsing.convert_bool import boolean
-from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 from ansible.plugins.connection import ConnectionBase
 from ansible.plugins.shell.powershell import _common_args
 from ansible.utils.display import Display

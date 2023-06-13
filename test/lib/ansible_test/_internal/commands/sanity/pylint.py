@@ -18,6 +18,10 @@ from . import (
     SANITY_ROOT,
 )
 
+from ...io import (
+    make_dirs,
+)
+
 from ...test import (
     TestResult,
 )
@@ -41,6 +45,7 @@ from ...ansible_util import (
     get_collection_detail,
     CollectionDetail,
     CollectionDetailError,
+    ResultType,
 )
 
 from ...config import (
@@ -151,19 +156,19 @@ class PylintTest(SanitySingleVersion):
             except CollectionDetailError as ex:
                 display.warning('Skipping pylint collection version checks since collection detail loading failed: %s' % ex.reason)
 
-        test_start = datetime.datetime.utcnow()
+        test_start = datetime.datetime.now(tz=datetime.timezone.utc)
 
         for context, context_paths in sorted(contexts):
             if not context_paths:
                 continue
 
-            context_start = datetime.datetime.utcnow()
+            context_start = datetime.datetime.now(tz=datetime.timezone.utc)
             messages += self.pylint(args, context, context_paths, plugin_dir, plugin_names, python, collection_detail)
-            context_end = datetime.datetime.utcnow()
+            context_end = datetime.datetime.now(tz=datetime.timezone.utc)
 
             context_times.append('%s: %d (%s)' % (context, len(context_paths), context_end - context_start))
 
-        test_end = datetime.datetime.utcnow()
+        test_end = datetime.datetime.now(tz=datetime.timezone.utc)
 
         for context_time in context_times:
             display.info(context_time, verbosity=4)
@@ -247,6 +252,12 @@ class PylintTest(SanitySingleVersion):
 
         # expose plugin paths for use in custom plugins
         env.update(dict(('ANSIBLE_TEST_%s_PATH' % k.upper(), os.path.abspath(v) + os.path.sep) for k, v in data_context().content.plugin_paths.items()))
+
+        # Set PYLINTHOME to prevent pylint from checking for an obsolete directory, which can result in a test failure due to stderr output.
+        # See: https://github.com/PyCQA/pylint/blob/e6c6bf5dfd61511d64779f54264b27a368c43100/pylint/constants.py#L148
+        pylint_home = os.path.join(ResultType.TMP.path, 'pylint')
+        make_dirs(pylint_home)
+        env.update(PYLINTHOME=pylint_home)
 
         if paths:
             display.info('Checking %d file(s) in context "%s" with config: %s' % (len(paths), context, rcfile), verbosity=1)

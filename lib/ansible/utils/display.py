@@ -26,6 +26,7 @@ else:
     # this will be set to False if curses.setupterm() fails
     HAS_CURSES = True
 
+import codecs
 import ctypes.util
 import fcntl
 import getpass
@@ -47,7 +48,7 @@ from struct import unpack, pack
 
 from ansible import constants as C
 from ansible.errors import AnsibleError, AnsibleAssertionError, AnsiblePromptInterrupt, AnsiblePromptNoninteractive
-from ansible.module_utils._text import to_bytes, to_text
+from ansible.module_utils.common.text.converters import to_bytes, to_text
 from ansible.module_utils.six import text_type
 from ansible.utils.color import stringc
 from ansible.utils.multiprocessing import context as multiprocessing_context
@@ -297,7 +298,23 @@ class Display(metaclass=Singleton):
         except Exception as ex:
             self.warning(f"failed to patch stdout/stderr for fork-safety: {ex}")
 
+        codecs.register_error('_replacing_warning_handler', self._replacing_warning_handler)
+        try:
+            sys.stdout.reconfigure(errors='_replacing_warning_handler')
+            sys.stderr.reconfigure(errors='_replacing_warning_handler')
+        except Exception as ex:
+            self.warning(f"failed to reconfigure stdout/stderr with custom encoding error handler: {ex}")
+
         self.setup_curses = False
+
+    def _replacing_warning_handler(self, exception):
+        # TODO: This should probably be deferred until after the current display is completed
+        #       this will require some amount of new functionality
+        self.deprecated(
+            'Non UTF-8 encoded data replaced with "?" while displaying text to stdout/stderr, this is temporary and will become an error',
+            version='2.18',
+        )
+        return '?', exception.end
 
     def set_queue(self, queue):
         """Set the _final_q on Display, so that we know to proxy display over the queue
@@ -325,6 +342,9 @@ class Display(metaclass=Singleton):
 
         Note: msg *must* be a unicode string to prevent UnicodeError tracebacks.
         """
+
+        if not isinstance(msg, str):
+            raise TypeError(f'Display message must be str, not: {msg.__class__.__name__}')
 
         if self._final_q:
             # If _final_q is set, that means we are in a WorkerProcess

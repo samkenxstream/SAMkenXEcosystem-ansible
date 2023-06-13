@@ -21,7 +21,7 @@ __metaclass__ = type
 
 from ansible import constants as C
 from ansible.errors import AnsibleError, AnsibleParserError, AnsibleUndefinedVariable, AnsibleAssertionError
-from ansible.module_utils._text import to_native
+from ansible.module_utils.common.text.converters import to_native
 from ansible.module_utils.six import string_types
 from ansible.parsing.mod_args import ModuleArgsParser
 from ansible.parsing.yaml.objects import AnsibleBaseYAMLObject, AnsibleMapping
@@ -75,7 +75,7 @@ class Task(Base, Conditional, Taggable, CollectionSearch, Notifiable, Delegatabl
     changed_when = NonInheritableFieldAttribute(isa='list', default=list)
     delay = NonInheritableFieldAttribute(isa='int', default=5)
     failed_when = NonInheritableFieldAttribute(isa='list', default=list)
-    loop = NonInheritableFieldAttribute()
+    loop = NonInheritableFieldAttribute(isa='list')
     loop_control = NonInheritableFieldAttribute(isa='class', class_type=LoopControl, default=LoopControl)
     poll = NonInheritableFieldAttribute(isa='int', default=C.DEFAULT_POLL_INTERVAL)
     register = NonInheritableFieldAttribute(isa='string', static=True)
@@ -508,3 +508,9 @@ class Task(Base, Conditional, Taggable, CollectionSearch, Notifiable, Delegatabl
                 return self._parent
             return self._parent.get_first_parent_include()
         return None
+
+    def get_play(self):
+        parent = self._parent
+        while not isinstance(parent, Block):
+            parent = parent._parent
+        return parent._play
