@@ -1,6 +1,6 @@
 # edit "sanity.mypy.in" and generate with: hacking/update-sanity-requirements.py --test mypy
 cffi==1.15.1
-cryptography==41.0.0
+cryptography==41.0.3
 jinja2==3.1.2
 markupsafe==2.1.2
 mypy==1.1.1
