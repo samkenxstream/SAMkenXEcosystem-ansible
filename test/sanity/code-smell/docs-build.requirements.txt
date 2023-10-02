@@ -48,5 +48,5 @@ sphinxcontrib-serializinghtml==1.1.5
 twiggy==0.5.1
 types-docutils==0.18.3
 typing-extensions==4.5.0
-urllib3==2.0.2
+urllib3==1.26.17
 yarl==1.9.2
